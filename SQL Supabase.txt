@@ -1,0 +1,120 @@
+drop table if exists client_discounts cascade;
+drop table if exists discounts cascade;
+drop table if exists settlements cascade;
+drop table if exists bookings cascade;
+drop table if exists rooms cascade;
+drop table if exists clients cascade;
+
+create table clients (
+  id bigint generated always as identity primary key,
+  last_name text not null,
+  first_name text not null,
+  middle_name text,
+  passport_data text not null,
+  comment text
+);
+
+create table rooms (
+  id bigint generated always as identity primary key,
+  room_number text not null unique,
+  capacity integer not null check (capacity > 0),
+  comfort_level text not null check (comfort_level in ('люкс', 'полулюкс', 'обычный')),
+  price numeric(10,2) not null check (price >= 0)
+);
+
+create table bookings (
+  id bigint generated always as identity primary key,
+  client_id bigint not null references clients(id) on delete cascade,
+  room_id bigint not null references rooms(id) on delete restrict,
+  booking_date date not null default current_date,
+  planned_check_in date not null,
+  planned_check_out date not null,
+  status text not null default 'active' check (status in ('active', 'cancelled', 'completed')),
+  note text,
+  check (planned_check_out > planned_check_in)
+);
+
+create table settlements (
+  id bigint generated always as identity primary key,
+  client_id bigint not null references clients(id) on delete cascade,
+  room_id bigint not null references rooms(id) on delete restrict,
+  check_in_date date not null,
+  check_out_date date not null,
+  note text,
+  booking_id bigint references bookings(id) on delete set null,
+  check (check_out_date > check_in_date)
+);
+
+create table discounts (
+  id bigint generated always as identity primary key,
+  name text not null unique,
+  discount_percent numeric(5,2) not null check (discount_percent >= 0 and discount_percent <= 100),
+  description text,
+  is_active boolean not null default true
+);
+
+create table client_discounts (
+  id bigint generated always as identity primary key,
+  client_id bigint not null references clients(id) on delete cascade,
+  discount_id bigint not null references discounts(id) on delete cascade,
+  date_from date not null default current_date,
+  date_to date,
+  check (date_to is null or date_to >= date_from),
+  unique (client_id, discount_id, date_from)
+);
+
+create index bookings_client_id_idx on bookings(client_id);
+create index bookings_room_id_idx on bookings(room_id);
+create index settlements_client_id_idx on settlements(client_id);
+create index settlements_room_id_idx on settlements(room_id);
+create index client_discounts_client_id_idx on client_discounts(client_id);
+create index client_discounts_discount_id_idx on client_discounts(discount_id);
+
+alter table clients disable row level security;
+alter table rooms disable row level security;
+alter table bookings disable row level security;
+alter table settlements disable row level security;
+alter table discounts disable row level security;
+alter table client_discounts disable row level security;
+
+grant usage on schema public to anon, authenticated;
+
+grant select, insert, update, delete on clients to anon, authenticated;
+grant select, insert, update, delete on rooms to anon, authenticated;
+grant select, insert, update, delete on bookings to anon, authenticated;
+grant select, insert, update, delete on settlements to anon, authenticated;
+grant select, insert, update, delete on discounts to anon, authenticated;
+grant select, insert, update, delete on client_discounts to anon, authenticated;
+
+grant usage, select on all sequences in schema public to anon, authenticated;
+alter default privileges in schema public grant select, insert, update, delete on tables to anon, authenticated;
+alter default privileges in schema public grant usage, select on sequences to anon, authenticated;
+
+insert into rooms (room_number, capacity, comfort_level, price)
+values
+  ('101', 1, 'обычный', 2500),
+  ('102', 2, 'полулюкс', 4500),
+  ('201', 3, 'люкс', 8000);
+
+insert into clients (last_name, first_name, middle_name, passport_data, comment)
+values
+  ('Иванов', 'Иван', 'Иванович', '1234 567890', 'Постоянный клиент'),
+  ('Петрова', 'Анна', 'Сергеевна', '5678 123456', 'Просит тихий номер');
+
+insert into discounts (name, discount_percent, description, is_active)
+values
+  ('Постоянный клиент', 10, 'Скидка для постоянных клиентов', true),
+  ('Пенсионер', 5, 'Скидка по категории клиента', true);
+
+insert into client_discounts (client_id, discount_id)
+values
+  (1, 1),
+  (1, 2);
+
+insert into bookings (client_id, room_id, planned_check_in, planned_check_out, status, note)
+values
+  (1, 2, '2026-03-20', '2026-03-25', 'active', 'Бронь на 5 дней');
+
+insert into settlements (client_id, room_id, check_in_date, check_out_date, note, booking_id)
+values
+  (2, 1, '2026-03-15', '2026-03-18', 'Заселение без брони', null);
